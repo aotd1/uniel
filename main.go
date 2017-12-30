@@ -6,19 +6,21 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
 
-	"github.com/aotd1/argparse"
 	"github.com/joho/godotenv"
 	"github.com/codingconcepts/env"
+	"github.com/aotd1/argparse"
 	"github.com/jacobsa/go-serial/serial"
 )
 
 type config struct {
-	PortName 		string	`env:"UNIEL_PORT" required:"true"`
+	PortName 		string	`env:"UNIEL_PORT" default:"/dev/ttyUSB0" required:"true"`
 	BaudRate 		uint	`env:"UNIEL_BAUD_RATE" default:"9600"`
 	DataBits 		uint	`env:"UNIEL_DATA_BITS" default:"8"`
 	StopBits 		uint	`env:"UNIEL_STOP_BITS" default:"1"`
 	FlowControl 	bool	`env:"UNIEL_FLOW_CONTROL" default:"false"`
+	DeviceAddress	int		`env:"UNIEL_DEVICE_ADDRESS" required:"true"`
 }
 
 func main() {
@@ -28,54 +30,55 @@ func main() {
 	if err := env.Set(&config); err != nil {
 		log.Fatal(err)
 	}
+	deviceAddress, err := getByteFromInt(config.DeviceAddress, 16)
+	if err != nil {
+		err := fmt.Errorf("bad address, please check environment: %v", err)
+		log.Fatal(err)
+	}
 
 	p := argparse.NewParser("uniel", "Uniel UCH-* modules controlling program")
 	offCmd := p.NewCommand("off", "Turn channel off")
 	onCmd := p.NewCommand("on", "Turn channel on")
-	address := byte(0x01)
-	channel := byte(0x01)
-	//address, err1 := getByte(p.String("a", "address", &argparse.Options{Required: true, Help: "Device address: 1-16"}))
-	//channel, err2 := getByte(p.String("c", "channel", &argparse.Options{Required: true, Help: "Channel: 1-8"}))
-	//if err1 != nil {
-	//	fmt.Print(p.Usage(err1))
-	//	return
-	//}
-	//
-	//if err2 != nil {
-	//	fmt.Print(p.Usage(err2))
-	//	return
-	//}
+	channelFlag := p.String("c", "channel", &argparse.Options{Required: true, Help: "Channel: 1-8"})
 
 	if err := p.Parse(os.Args); err != nil {
 		fmt.Print(p.Usage(err))
 		return
 	}
 
+	channel, err := getByteFromString(*channelFlag, 8)
+	if err != nil {
+		err := fmt.Errorf("bad channel, please check usage: %v", err)
+		log.Fatal(p.Usage(err))
+	}
 	port := openPort(config)
 	defer port.Close()
 
 	if onCmd.Happened() {
-		run(port, address, 0x0A, [3]byte{0xFF, channel, 0x00})
+		run(port, deviceAddress, 0x0A, [3]byte{0xFF, channel, 0x00})
 	} else if offCmd.Happened() {
-		run(port, address, 0x0A, [3]byte{0x00, channel, 0x00})
+		run(port, deviceAddress, 0x0A, [3]byte{0x00, channel, 0x00})
 	} else {
 		err := fmt.Errorf("bad arguments, please check usage")
-		fmt.Print(p.Usage(err))
+		log.Fatal(p.Usage(err))
 	}
 
 }
 
-func getByte(address *string) (byte, error) {
-	switch *address {
-		case "1": return 0x00, nil
-		case "2": return 0x01, nil
-		case "3": return 0x02, nil
-		case "4": return 0x03, nil
-		case "5": return 0x04, nil
-		case "6": return 0x05, nil
-		case "7": return 0x06, nil
-		case "8": return 0x07, nil
-		default: return 0x00, fmt.Errorf("bad byte argument, please check usage")
+func getByteFromString(value string, max int) (byte, error) {
+	intValue, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("argument not convertable to integer")
+	} else {
+		return getByteFromInt(intValue, max)
+	}
+}
+
+func getByteFromInt(value int, max int) (byte, error) {
+	if value <= 0 || value > max {
+		return 0, fmt.Errorf("argument not in range 1 - %v", max)
+	} else {
+		return byte(value - 1), nil
 	}
 }
 
