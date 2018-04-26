@@ -1,5 +1,6 @@
 .idea
 uniel.iml
 
-bin/
+bin/*
+!bin/.gitkeep
 .env

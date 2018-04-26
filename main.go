@@ -30,7 +30,7 @@ func main() {
 	if err := env.Set(&config); err != nil {
 		log.Fatal(err)
 	}
-	deviceAddress, err := getByteFromInt(config.DeviceAddress, 16)
+	deviceAddress, err := getByteFromInt(config.DeviceAddress, 1, 127)
 	if err != nil {
 		err := fmt.Errorf("bad address, please check environment: %v", err)
 		log.Fatal(err)
@@ -39,14 +39,15 @@ func main() {
 	p := argparse.NewParser("uniel", "Uniel UCH-* modules controlling program")
 	offCmd := p.NewCommand("off", "Turn channel off")
 	onCmd := p.NewCommand("on", "Turn channel on")
-	channelFlag := p.String("c", "channel", &argparse.Options{Required: true, Help: "Channel: 1-8"})
+//	state := p.NewCommand("state", "Get channel state")
+	channelFlag := p.String("c", "channel", &argparse.Options{Required: true, Help: "Channel: 0-7"})
 
 	if err := p.Parse(os.Args); err != nil {
 		fmt.Print(p.Usage(err))
 		return
 	}
 
-	channel, err := getByteFromString(*channelFlag, 8)
+	channel, err := getByteFromString(*channelFlag, 0,7)
 	if err != nil {
 		err := fmt.Errorf("bad channel, please check usage: %v", err)
 		log.Fatal(p.Usage(err))
@@ -65,20 +66,20 @@ func main() {
 
 }
 
-func getByteFromString(value string, max int) (byte, error) {
+func getByteFromString(value string, min int, max int) (byte, error) {
 	intValue, err := strconv.Atoi(value)
 	if err != nil {
 		return 0, fmt.Errorf("argument not convertable to integer")
 	} else {
-		return getByteFromInt(intValue, max)
+		return getByteFromInt(intValue, min, max)
 	}
 }
 
-func getByteFromInt(value int, max int) (byte, error) {
-	if value <= 0 || value > max {
-		return 0, fmt.Errorf("argument not in range 1 - %v", max)
+func getByteFromInt(value int, min int, max int) (byte, error) {
+	if value < min || value > max {
+		return 0, fmt.Errorf("argument not in range %v - %v", min, max)
 	} else {
-		return byte(value - 1), nil
+		return byte(value), nil
 	}
 }
 
@@ -111,5 +112,7 @@ func run(port io.ReadWriteCloser, address byte, command byte, payload [3]byte) {
 	if err != nil {
 		log.Fatalf("port.Write: %v", err)
 	}
+
+	//TODO: Check response from device
 	fmt.Printf("Wrote %s bytes", hex.Dump(content))
 }
